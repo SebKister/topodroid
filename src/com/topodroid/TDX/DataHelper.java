@@ -1962,7 +1962,7 @@ public class DataHelper extends DataSetObservable
    * @param fStation FROM station name
    * @param tStation TO station name
    */
-  void updateShotName( long id, long sid, String fStation, String tStation )
+  public void updateShotName( long id, long sid, String fStation, String tStation )
   {
     // TDLog.v( "update shot " + id + " name " + fStation + " " + tStation );
     if ( myDB == null ) return;

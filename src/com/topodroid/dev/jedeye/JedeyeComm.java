@@ -15,13 +15,21 @@
 package com.topodroid.dev.jedeye;
 
 import com.topodroid.TDX.TopoDroidApp;
+import com.topodroid.TDX.TDInstance;
+import com.topodroid.TDX.ListerHandler;
+import com.topodroid.TDX.Lister;
 import com.topodroid.dev.Device;
+import com.topodroid.dev.DataType;
 import com.topodroid.dev.sap.SapComm;
 
 import android.bluetooth.BluetoothDevice;
+import android.os.Bundle;
+import android.os.Message;
 
 public class JedeyeComm extends SapComm
 {
+  private int mStationCounter = 0; // prototype: auto-number stations 0,1,2,...
+
   /** cstr
    * @param app        application
    * @param address    JedEye address
@@ -59,5 +67,38 @@ public class JedeyeComm extends SapComm
       return true;
     }
     return super.assertDevice( device );
+  }
+
+  /** Promote a tagged survey LEG to a TopoDroid centerline leg.
+   *
+   * The inherited handler inserts the raw shot (and sets mLastShotId); we then
+   * give it FROM->TO stations, which makes the DBlock a MAIN_LEG. Splays and
+   * section names come in later phases. Station numbering here is a placeholder
+   * -- the full feature should reconcile it with the survey's station policy or
+   * drive it from the device section name. See doc/JedEye_BLE_Protocol.md.
+   * @param res        packet type
+   * @param lister     data lister
+   * @param data_type  packet datatype
+   */
+  @Override
+  public void handleRegularPacket( int res, ListerHandler lister, int data_type )
+  {
+    super.handleRegularPacket( res, lister, data_type ); // inserts raw shot, sets mLastShotId
+    if ( res == DataType.PACKET_DATA
+         && mSapProto instanceof JedeyeProtocol
+         && ((JedeyeProtocol) mSapProto).shotType() == JedeyeProtocol.SHOT_LEG
+         && mLastShotId > 0 ) {
+      String from = Integer.toString( mStationCounter );
+      String to   = Integer.toString( mStationCounter + 1 );
+      TopoDroidApp.mData.updateShotName( mLastShotId, TDInstance.sid, from, to ); // -> MAIN_LEG
+      mStationCounter += 1;
+      if ( lister != null ) { // re-notify so the UI re-reads the now-named leg
+        Message msg = lister.obtainMessage( Lister.LIST_UPDATE );
+        Bundle b = new Bundle();
+        b.putLong( Lister.BLOCK_ID, mLastShotId );
+        msg.setData( b );
+        lister.sendMessage( msg );
+      }
+    }
   }
 }
