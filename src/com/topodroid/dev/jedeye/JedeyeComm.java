@@ -69,13 +69,14 @@ public class JedeyeComm extends SapComm
     return super.assertDevice( device );
   }
 
-  /** Promote a tagged survey LEG to a TopoDroid centerline leg.
+  /** File a tagged survey shot: a LEG becomes a TopoDroid centerline leg
+   * (FROM->TO -> MAIN_LEG); a SPLAY becomes a wall splay (FROM only) attached to
+   * the leg's FROM station (where the operator scanned the room).
    *
    * The inherited handler inserts the raw shot (and sets mLastShotId); we then
-   * give it FROM->TO stations, which makes the DBlock a MAIN_LEG. Splays and
-   * section names come in later phases. Station numbering here is a placeholder
-   * -- the full feature should reconcile it with the survey's station policy or
-   * drive it from the device section name. See doc/JedEye_BLE_Protocol.md.
+   * (re)name it, which sets the DBlock type. Station numbering here is a
+   * placeholder -- the full feature should reconcile it with the survey's station
+   * policy or drive it from the device section name. See doc/JedEye_BLE_Protocol.md.
    * @param res        packet type
    * @param lister     data lister
    * @param data_type  packet datatype
@@ -84,21 +85,27 @@ public class JedeyeComm extends SapComm
   public void handleRegularPacket( int res, ListerHandler lister, int data_type )
   {
     super.handleRegularPacket( res, lister, data_type ); // inserts raw shot, sets mLastShotId
-    if ( res == DataType.PACKET_DATA
-         && mSapProto instanceof JedeyeProtocol
-         && ((JedeyeProtocol) mSapProto).shotType() == JedeyeProtocol.SHOT_LEG
-         && mLastShotId > 0 ) {
-      String from = Integer.toString( mStationCounter );
-      String to   = Integer.toString( mStationCounter + 1 );
-      TopoDroidApp.mData.updateShotName( mLastShotId, TDInstance.sid, from, to ); // -> MAIN_LEG
+    if ( res != DataType.PACKET_DATA || ! ( mSapProto instanceof JedeyeProtocol ) || mLastShotId <= 0 )
+      return;
+    int type = ( (JedeyeProtocol) mSapProto ).shotType();
+    String from, to;
+    if ( type == JedeyeProtocol.SHOT_LEG ) {
+      from = Integer.toString( mStationCounter );
+      to   = Integer.toString( mStationCounter + 1 ); // FROM + TO -> MAIN_LEG
       mStationCounter += 1;
-      if ( lister != null ) { // re-notify so the UI re-reads the now-named leg
-        Message msg = lister.obtainMessage( Lister.LIST_UPDATE );
-        Bundle b = new Bundle();
-        b.putLong( Lister.BLOCK_ID, mLastShotId );
-        msg.setData( b );
-        lister.sendMessage( msg );
-      }
+    } else if ( type == JedeyeProtocol.SHOT_SPLAY ) {
+      from = Integer.toString( Math.max( 0, mStationCounter - 1 ) ); // leg FROM = scan station
+      to   = "";                                                     // FROM only -> SPLAY
+    } else {
+      return; // SHOT_LEGACY (distance-meter shot): leave the raw shot as-is
+    }
+    TopoDroidApp.mData.updateShotName( mLastShotId, TDInstance.sid, from, to );
+    if ( lister != null ) { // re-notify so the UI re-reads the now-named shot
+      Message msg = lister.obtainMessage( Lister.LIST_UPDATE );
+      Bundle b = new Bundle();
+      b.putLong( Lister.BLOCK_ID, mLastShotId );
+      msg.setData( b );
+      lister.sendMessage( msg );
     }
   }
 }

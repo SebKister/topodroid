@@ -31,9 +31,11 @@ class JedeyeProtocol extends SapProtocol
   // kind of the most recently parsed shot
   static final int SHOT_LEGACY = 0; // untagged 17-byte distance-meter shot
   static final int SHOT_LEG    = 1; // survey centerline leg
+  static final int SHOT_SPLAY  = 2; // survey room/wall splay
 
   // tagged-frame message types (byte [0]); see firmware src/net/bluetooth.cpp
-  private static final int FRAME_SURVEY_LEG = 0x01;
+  private static final int FRAME_SURVEY_LEG   = 0x01;
+  private static final int FRAME_SURVEY_SPLAY = 0x02;
 
   private int mShotType = SHOT_LEGACY;
 
@@ -64,14 +66,17 @@ class JedeyeProtocol extends SapProtocol
   @Override
   public int handleRead( byte[] bytes )
   {
-    if ( bytes != null && bytes.length >= 18 && (bytes[0] & 0xff) == FRAME_SURVEY_LEG ) {
-      ByteBuffer bb = ByteBuffer.wrap( bytes ).order( ByteOrder.LITTLE_ENDIAN );
-      mBearing  = bb.getFloat( 2 );
-      mClino    = bb.getFloat( 6 );
-      mRoll     = bb.getFloat( 10 );
-      mDistance = bb.getFloat( 14 );
-      mShotType = SHOT_LEG;
-      return DataType.PACKET_DATA;
+    if ( bytes != null && bytes.length >= 18 ) {
+      int type = bytes[0] & 0xff;
+      if ( type == FRAME_SURVEY_LEG || type == FRAME_SURVEY_SPLAY ) {
+        ByteBuffer bb = ByteBuffer.wrap( bytes ).order( ByteOrder.LITTLE_ENDIAN );
+        mBearing  = bb.getFloat( 2 );
+        mClino    = bb.getFloat( 6 );
+        mRoll     = bb.getFloat( 10 );
+        mDistance = bb.getFloat( 14 );
+        mShotType = ( type == FRAME_SURVEY_LEG ) ? SHOT_LEG : SHOT_SPLAY;
+        return DataType.PACKET_DATA;
+      }
     }
     mShotType = SHOT_LEGACY;
     return super.handleRead( bytes );
