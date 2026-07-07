@@ -59,7 +59,7 @@ public class TopoDroidComm
   public byte[] mCoeff;
 
   boolean mHasG = false; // whether the last received packet was G type
-  long mLastShotId;   // last shot id
+  protected long mLastShotId;   // last shot id (protected: JedeyeComm renames the just-inserted leg)
 
   // private AtomicInteger mNrReadPackets; // FIXME_ATOMIC_INT
   protected volatile int mNrReadPackets;
